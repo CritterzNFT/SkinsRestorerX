@@ -108,6 +108,10 @@ public final class SpigotSkinRefresher implements Consumer<Player> {
 
     @Override
     public void accept(Player player) {
+        if (!com.github.puregero.multilib.MultiLib.isLocalPlayer(player)) {
+            return;
+        }
+
         try {
             final Object entityPlayer = getHandleMethod.invoke(player);
 

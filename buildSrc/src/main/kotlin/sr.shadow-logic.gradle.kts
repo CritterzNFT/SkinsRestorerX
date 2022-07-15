@@ -125,6 +125,7 @@ fun ShadowJar.configureRelocations() {
     relocate("com.cryptomorin.xseries", "net.skinsrestorer.shadow.xseries")
     relocate("org.bstats", "net.skinsrestorer.shadow.bstats")
     relocate("io.papermc.lib", "net.skinsrestorer.shadow.paperlib")
+    relocate("com.github.puregero.multilib", "net.skinsrestorer.shadow.multilib")
     relocate("org.fusesource.jansi", "net.skinsrestorer.shadow.jansi")
     relocate("org.inventivetalent.update.spiget", "net.skinsrestorer.shadow.spiget")
 
