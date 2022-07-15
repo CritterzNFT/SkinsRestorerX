@@ -30,9 +30,9 @@ import net.skinsrestorer.api.SkinsRestorerAPI;
 import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.interfaces.IPropertyFactory;
 import net.skinsrestorer.api.interfaces.ISRPlayer;
+import net.skinsrestorer.api.interfaces.ISRProxyPlayer;
 import net.skinsrestorer.api.property.IProperty;
 import net.skinsrestorer.api.reflection.ReflectionUtil;
-import net.skinsrestorer.api.serverinfo.Platform;
 import net.skinsrestorer.bungee.commands.GUICommand;
 import net.skinsrestorer.bungee.commands.SkinCommand;
 import net.skinsrestorer.bungee.commands.SrCommand;
@@ -42,6 +42,7 @@ import net.skinsrestorer.bungee.listeners.PluginMessageListener;
 import net.skinsrestorer.bungee.utils.BungeeConsoleImpl;
 import net.skinsrestorer.bungee.utils.WrapperBungee;
 import net.skinsrestorer.shared.interfaces.ISRPlugin;
+import net.skinsrestorer.shared.interfaces.ISRProxyPlugin;
 import net.skinsrestorer.shared.storage.Config;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.storage.SkinStorage;
@@ -52,7 +53,7 @@ import net.skinsrestorer.shared.utils.SharedMethods;
 import net.skinsrestorer.shared.utils.WrapperFactory;
 import net.skinsrestorer.shared.utils.connections.MineSkinAPI;
 import net.skinsrestorer.shared.utils.connections.MojangAPI;
-import net.skinsrestorer.shared.utils.log.LoggerImpl;
+import net.skinsrestorer.shared.utils.log.JavaLoggerImpl;
 import net.skinsrestorer.shared.utils.log.SRLogger;
 import org.bstats.bungeecord.Metrics;
 import org.bstats.charts.SingleLineChart;
@@ -62,26 +63,28 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Getter
 @SuppressWarnings("Duplicates")
-public class SkinsRestorer extends Plugin implements ISRPlugin {
+public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
     private static final String NEW_PROPERTY_CLASS = "net.md_5.bungee.protocol.Property";
-    private final Path dataFolderPath = getDataFolder().toPath();
     private final MetricsCounter metricsCounter = new MetricsCounter();
-    private final SRLogger srLogger = new SRLogger(new LoggerImpl(getProxy().getLogger(), new BungeeConsoleImpl(getProxy().getConsole())), true);
-    private final MojangAPI mojangAPI = new MojangAPI(srLogger, Platform.BUNGEECORD, metricsCounter);
+    private final BungeeConsoleImpl bungeeConsole = new BungeeConsoleImpl(getProxy() == null ? null : getProxy().getConsole());
+    private final JavaLoggerImpl javaLogger = new JavaLoggerImpl(bungeeConsole, getProxy() == null ? null : getProxy().getLogger());
+    private final SRLogger srLogger = new SRLogger(javaLogger, true);
+    private final MojangAPI mojangAPI = new MojangAPI(srLogger, metricsCounter);
     private final MineSkinAPI mineSkinAPI = new MineSkinAPI(srLogger, metricsCounter);
     private final SkinStorage skinStorage = new SkinStorage(srLogger, mojangAPI, mineSkinAPI);
-    private final SkinsRestorerAPI skinsRestorerAPI = new SkinsRestorerBungeeAPI();
     private final SkinApplierBungeeShared skinApplierBungee = selectSkinApplier(this, srLogger);
+    private final SkinsRestorerAPI skinsRestorerAPI = new SkinsRestorerBungeeAPI();
+    private final SkinCommand skinCommand = new SkinCommand(this);
+    private Path dataFolderPath;
     private boolean outdated;
     private UpdateChecker updateChecker;
-    private PluginMessageListener pluginMessageListener;
-    private SkinCommand skinCommand;
     private BungeeCommandManager manager;
 
     /*
@@ -103,6 +106,9 @@ public class SkinsRestorer extends Plugin implements ISRPlugin {
 
     @Override
     public void onEnable() {
+        bungeeConsole.setCommandSender(getProxy().getConsole());
+        javaLogger.setLogger(getProxy().getLogger());
+        dataFolderPath = getDataFolder().toPath();
         srLogger.load(dataFolderPath);
         Path updaterDisabled = dataFolderPath.resolve("noupdate.txt");
 
@@ -138,12 +144,10 @@ public class SkinsRestorer extends Plugin implements ISRPlugin {
         // Init commands
         initCommands();
 
-        getProxy().registerChannel("sr:skinchange");
-
         // Init message channel
+        getProxy().registerChannel("sr:skinchange");
         getProxy().registerChannel("sr:messagechannel");
-        pluginMessageListener = new PluginMessageListener(this);
-        getProxy().getPluginManager().registerListener(this, pluginMessageListener);
+        getProxy().getPluginManager().registerListener(this, new PluginMessageListener(this));
 
         // Run connection check
         getProxy().getScheduler().runAsync(this, () -> SharedMethods.runServiceCheck(mojangAPI, srLogger));
@@ -154,7 +158,6 @@ public class SkinsRestorer extends Plugin implements ISRPlugin {
 
         prepareACF(manager, srLogger);
 
-        this.skinCommand = new SkinCommand(this);
         manager.registerCommand(skinCommand);
         manager.registerCommand(new SrCommand(this));
         manager.registerCommand(new GUICommand(this));
@@ -162,7 +165,7 @@ public class SkinsRestorer extends Plugin implements ISRPlugin {
 
     private boolean initStorage() {
         // Initialise MySQL
-        if (!SharedMethods.initMysql(srLogger, skinStorage, dataFolderPath)) {
+        if (!SharedMethods.initStorage(srLogger, skinStorage, dataFolderPath)) {
             getProxy().getPluginManager().unregisterListeners(this);
             getProxy().getPluginManager().unregisterCommands(this);
             return false;
@@ -209,6 +212,11 @@ public class SkinsRestorer extends Plugin implements ISRPlugin {
     @Override
     public Collection<ISRPlayer> getOnlinePlayers() {
         return getProxy().getPlayers().stream().map(WrapperBungee::wrapPlayer).collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<ISRProxyPlayer> getPlayer(String playerName) {
+        return Optional.ofNullable(getProxy().getPlayer(playerName)).map(WrapperBungee::wrapPlayer);
     }
 
     private static class WrapperFactoryBungee extends WrapperFactory {

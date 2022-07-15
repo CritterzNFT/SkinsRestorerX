@@ -20,7 +20,7 @@ pluginManagement {
 }
 
 plugins {
-    id("com.gradle.enterprise") version "3.10.2"
+    id("com.gradle.enterprise") version "3.10.3"
 }
 
 rootProject.name = "skinsrestorer-parent"
@@ -82,7 +82,7 @@ setOf("shared", "propertyold", "propertynew").forEach {
     include("multiver:bungee:$it")
 }
 
-setOf("paper").forEach {
+setOf("v1-7", "spigot", "paper").forEach {
     include("multiver:$it")
 }
 

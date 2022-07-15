@@ -75,7 +75,7 @@ public class MineSkinAPI implements IMineSkinAPI {
                 if (e.getCause() instanceof TryAgainException) {
                     failedAttempts.incrementAndGet();
                 } else if (e.getCause() instanceof SkinRequestException) {
-                    throw (SkinRequestException) e.getCause();
+                    throw new SkinRequestException(e.getCause());
                 } else {
                     throw new SkinRequestException(e.getMessage());
                 }
@@ -91,6 +91,7 @@ public class MineSkinAPI implements IMineSkinAPI {
 
             try {
                 val response = queryURL("url=" + URLEncoder.encode(url, "UTF-8") + skinVariantString);
+                logger.debug("MineSkinAPI: Response: " + response);
                 if (!response.isPresent()) // API time out
                     throw new SkinRequestException(Locale.ERROR_UPDATING_SKIN);
 
@@ -125,7 +126,7 @@ public class MineSkinAPI implements IMineSkinAPI {
                         if (errorDelayResponse.getDelay() != null) {
                             TimeUnit.SECONDS.sleep(errorDelayResponse.getDelay());
                         } else if (errorDelayResponse.getNextRequest() != null) {
-                            Instant nextRequestInstant = Instant.ofEpochSecond( errorDelayResponse.getNextRequest() );
+                            Instant nextRequestInstant = Instant.ofEpochSecond(errorDelayResponse.getNextRequest());
                             int delay = (int) Duration.between(Instant.now(), nextRequestInstant).getSeconds();
 
                             if (delay > 0)

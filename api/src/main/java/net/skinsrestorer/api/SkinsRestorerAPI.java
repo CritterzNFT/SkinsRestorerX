@@ -82,7 +82,7 @@ public abstract class SkinsRestorerAPI {
      * @return The players custom skin name if set or null if not set
      */
     public String getSkinName(String playerName) {
-        return skinStorage.getSkinOfPlayer(playerName).orElse(null);
+        return getSkinStorage().getSkinOfPlayer(playerName).orElse(null);
     }
 
     /**
@@ -102,7 +102,7 @@ public abstract class SkinsRestorerAPI {
      * @param skinName   Skin name
      **/
     public void setSkinName(String playerName, String skinName) {
-        skinStorage.setSkinOfPlayer(playerName, skinName);
+        getSkinStorage().setSkinOfPlayer(playerName, skinName);
     }
 
     /**
@@ -111,7 +111,7 @@ public abstract class SkinsRestorerAPI {
      * @param skinName Skin name
      **/
     public IProperty getSkinData(String skinName) {
-        return skinStorage.getSkinData(skinName).orElse(null);
+        return getSkinStorage().getSkinData(skinName).orElse(null);
     }
 
     /**
@@ -127,7 +127,7 @@ public abstract class SkinsRestorerAPI {
         if (timestamp == null) {
             setSkinData(skinName, textures);
         } else {
-            setSkinData(skinName, textures, timestamp);
+            setSkinData(skinName, textures, (long) timestamp);
         }
     }
 
@@ -135,11 +135,11 @@ public abstract class SkinsRestorerAPI {
      * Set stored properties of a skin in storage.
      * Only changes stored data, does not refresh anyone who has the skin.
      *
-     * @param skinName  Skin name
-     * @param textures  Property object
+     * @param skinName Skin name
+     * @param textures Property object
      */
     public void setSkinData(String skinName, IProperty textures) {
-        skinStorage.setSkinData(skinName, textures);
+        getSkinStorage().setSkinData(skinName, textures);
     }
 
     /**
@@ -151,7 +151,7 @@ public abstract class SkinsRestorerAPI {
      * @param timestamp timestamp long in millis
      */
     public void setSkinData(String skinName, IProperty textures, long timestamp) {
-        skinStorage.setSkinData(skinName, textures, timestamp);
+        getSkinStorage().setSkinData(skinName, textures, timestamp);
     }
 
     /**
@@ -168,9 +168,9 @@ public abstract class SkinsRestorerAPI {
     }
 
     /**
-     * @see #getSkinTextureUrl(IProperty)
      * @param skinName Skin name
      * @return textures.minecraft.net url
+     * @see #getSkinTextureUrl(IProperty)
      * @deprecated use {@link #getSkinTextureUrl(IProperty)} instead
      */
     @Deprecated
@@ -201,7 +201,7 @@ public abstract class SkinsRestorerAPI {
      * Only returns the id at the end of the url.
      * Example:
      * <a href="https://textures.minecraft.net/texture/cb50beab76e56472637c304a54b330780e278decb017707bf7604e484e4d6c9f">
-     *     https://textures.minecraft.net/texture/cb50beab76e56472637c304a54b330780e278decb017707bf7604e484e4d6c9f
+     * https://textures.minecraft.net/texture/cb50beab76e56472637c304a54b330780e278decb017707bf7604e484e4d6c9f
      * </a>
      * Would return: cb50beab76e56472637c304a54b330780e278decb017707bf7604e484e4d6c9f
      *
@@ -237,7 +237,7 @@ public abstract class SkinsRestorerAPI {
 
     public void setSkin(String playerName, String skinName) throws SkinRequestException {
         setSkinName(playerName, skinName);
-        skinStorage.getSkinForPlayer(skinName);
+        getSkinStorage().getSkinForPlayer(skinName);
     }
 
     public IProperty createPlatformProperty(IProperty property) {
@@ -257,7 +257,13 @@ public abstract class SkinsRestorerAPI {
     }
 
     public void removeSkin(String playerName) {
-        skinStorage.removeSkinOfPlayer(playerName);
+        getSkinStorage().removeSkinOfPlayer(playerName);
+    }
+
+    private ISkinStorage getSkinStorage() {
+        if (skinStorage.isInitialized()) {
+            return skinStorage;
+        } else throw new IllegalStateException("SkinStorage is not initialized. Is SkinsRestorer in proxy mode?");
     }
 
     public abstract void applySkin(PlayerWrapper playerWrapper) throws SkinRequestException;
