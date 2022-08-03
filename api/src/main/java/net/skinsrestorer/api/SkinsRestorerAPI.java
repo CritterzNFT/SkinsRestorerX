@@ -22,6 +22,7 @@ package net.skinsrestorer.api;
 import com.google.gson.Gson;
 import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NonNull;
 import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.interfaces.*;
 import net.skinsrestorer.api.model.MojangProfileResponse;
@@ -190,10 +191,7 @@ public abstract class SkinsRestorerAPI {
      * @param property Profile property
      * @return full textures.minecraft.net url
      */
-    public String getSkinTextureUrl(IProperty property) {
-        if (property == null)
-            return null;
-
+    public String getSkinTextureUrl(@NonNull IProperty property) {
         return getSkinProfileData(property).getTextures().getSKIN().getUrl();
     }
 
@@ -209,10 +207,7 @@ public abstract class SkinsRestorerAPI {
      * @return textures.minecraft.net id
      * @see #getSkinTextureUrl(IProperty)
      */
-    public String getSkinTextureUrlStripped(IProperty property) {
-        if (property == null)
-            return null;
-
+    public String getSkinTextureUrlStripped(@NonNull IProperty property) {
         return getSkinProfileData(property).getTextures().getSKIN().getStrippedUrl();
     }
 
@@ -226,10 +221,7 @@ public abstract class SkinsRestorerAPI {
      * @param property Profile property
      * @return Decoded profile data as java object
      */
-    public MojangProfileResponse getSkinProfileData(IProperty property) {
-        if (property == null)
-            return null;
-
+    public MojangProfileResponse getSkinProfileData(@NonNull IProperty property) {
         String decodedString = new String(Base64.getDecoder().decode(property.getValue()));
 
         return gson.fromJson(decodedString, MojangProfileResponse.class);

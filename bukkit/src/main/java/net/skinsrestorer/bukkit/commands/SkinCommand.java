@@ -26,8 +26,6 @@ import co.aikar.commands.bukkit.contexts.OnlinePlayer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import net.skinsrestorer.api.SkinVariant;
-import net.skinsrestorer.api.SkinsRestorerAPI;
-import net.skinsrestorer.api.interfaces.ISRPlayer;
 import net.skinsrestorer.bukkit.SkinsRestorer;
 import net.skinsrestorer.shared.commands.ISkinCommand;
 import org.bukkit.command.CommandSender;
@@ -79,6 +77,13 @@ public class SkinCommand extends BaseCommand implements ISkinCommand {
         onSkinClearOther(wrapCommandSender(sender), wrapPlayer(target.getPlayer()));
     }
 
+    @Subcommand("search")
+    @CommandPermission("%skinSearch")
+    @Description("%helpSkinSearch")
+    public void onSkinSearch(CommandSender sender, String search) {
+        onSkinSearch(wrapCommandSender(sender), search);
+    }
+
     @Subcommand("update")
     @CommandPermission("%skinUpdate")
     @Description("%helpSkinUpdate")
@@ -120,11 +125,5 @@ public class SkinCommand extends BaseCommand implements ISkinCommand {
     @Syntax("%SyntaxSkinUrl")
     public void onSkinSetUrl(Player player, String url, @Optional SkinVariant skinVariant) {
         onSkinSetUrl(wrapPlayer(player), url, skinVariant);
-    }
-
-    @Override
-    public void clearSkin(ISRPlayer player) {
-        SkinsRestorerAPI.getApi().applySkin(player.getWrapper(), emptySkin);
-        plugin.getSkinApplierBukkit().updateSkin(player.getWrapper().get(Player.class)); // TODO: make not platform specific
     }
 }

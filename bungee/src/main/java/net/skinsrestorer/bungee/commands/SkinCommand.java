@@ -28,7 +28,6 @@ import lombok.RequiredArgsConstructor;
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.skinsrestorer.api.SkinVariant;
-import net.skinsrestorer.api.interfaces.ISRPlayer;
 import net.skinsrestorer.bungee.SkinsRestorer;
 import net.skinsrestorer.shared.commands.ISkinCommand;
 
@@ -78,6 +77,13 @@ public class SkinCommand extends BaseCommand implements ISkinCommand {
         onSkinClearOther(wrapCommandSender(sender), wrapPlayer(target.getPlayer()));
     }
 
+    @Subcommand("search")
+    @CommandPermission("%skinSearch")
+    @Description("%helpSkinSearch")
+    public void onSkinSearch(CommandSender sender, String search) {
+        onSkinSearch(wrapCommandSender(sender), search);
+    }
+
     @Subcommand("update")
     @CommandPermission("%skinUpdate")
     @Description("%helpSkinUpdate")
@@ -119,10 +125,5 @@ public class SkinCommand extends BaseCommand implements ISkinCommand {
     @Syntax("%SyntaxSkinUrl")
     public void onSkinSetUrl(ProxiedPlayer player, String url, @Optional SkinVariant skinVariant) {
         onSkinSetUrl(wrapPlayer(player), url, skinVariant);
-    }
-
-    @Override
-    public void clearSkin(ISRPlayer player) {
-        plugin.getSkinsRestorerAPI().applySkin(player.getWrapper(), emptySkin);
     }
 }
