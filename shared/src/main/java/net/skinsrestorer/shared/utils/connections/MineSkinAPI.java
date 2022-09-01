@@ -28,11 +28,11 @@ import net.skinsrestorer.api.SkinsRestorerAPI;
 import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.interfaces.IMineSkinAPI;
 import net.skinsrestorer.api.property.IProperty;
+import net.skinsrestorer.api.util.Pair;
 import net.skinsrestorer.shared.exception.TryAgainException;
 import net.skinsrestorer.shared.storage.Config;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.utils.MetricsCounter;
-import net.skinsrestorer.shared.utils.Pair;
 import net.skinsrestorer.shared.utils.connections.responses.mineskin.MineSkinErrorDelayResponse;
 import net.skinsrestorer.shared.utils.connections.responses.mineskin.MineSkinErrorResponse;
 import net.skinsrestorer.shared.utils.connections.responses.mineskin.MineSkinUrlResponse;
@@ -123,6 +123,28 @@ public class MineSkinAPI implements IMineSkinAPI {
                                 logger.debug("[ERROR] MineSkin Failed! Reason: " + error);
                                 throw new SkinRequestException(Locale.ERROR_INVALID_URLSKIN);
                         }
+                    case 403:
+                        MineSkinErrorResponse errorResponse2 = gson.fromJson(response.get().getRight(), MineSkinErrorResponse.class);
+                        String errorCode2 = errorResponse2.getErrorCode();
+                        String error2 = errorResponse2.getError();
+                        if (errorCode2.equals("invalid_api_key")) {
+                            logger.severe("[ERROR] MineSkin API key is not invalid! Reason: " + error2);
+                            switch (error2) {
+                                case "Invalid API Key":
+                                    logger.severe("The API Key provided is not registered on MineSkin! Please empty MineskinAPIKey in plugins/SkinsRestorer/config.yml and run /sr reload");
+                                    break;
+                                case "Client not allowed":
+                                    logger.severe("This server ip is not on the apikey allowed IPs list!");
+                                    break;
+                                case "Origin not allowed":
+                                    logger.severe("This server Origin is not on the apikey allowed Origins list!");
+                                    break;
+                                case "Agent not allowed":
+                                    logger.severe("SkinsRestorer's agent \"SkinsRestorer\" is not on the apikey allowed agents list!");
+                                    break;
+                            }
+                            throw new SkinRequestException("Invalid Mineskin API key!, nag the server owner about this!");
+                        }
                     case 429:
                         MineSkinErrorDelayResponse errorDelayResponse = gson.fromJson(response.get().getRight(), MineSkinErrorDelayResponse.class);
                         // If "Too many requests"
@@ -193,7 +215,7 @@ public class MineSkinAPI implements IMineSkinAPI {
                         outStr.append((char) c);
                 }
 
-                return Optional.of(new Pair<>(con.getResponseCode(), outStr.toString()));
+                return Optional.of(Pair.of(con.getResponseCode(), outStr.toString()));
             } catch (IOException e) {
                 if (i == 2)
                     throw e;

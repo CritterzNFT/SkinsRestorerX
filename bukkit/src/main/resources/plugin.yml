@@ -4,7 +4,7 @@ version: ${version}
 description: ${description}
 website: https://skinsrestorer.net/
 authors: [ "knat", "AlexProgrammerDE", "Th3Tr0LLeR", "McLive", "DoNotSpamPls"]
-softdepend: [ "ViaBackwards", "ProtocolLib" ]
+softdepend: [ "ProtocolLib", "ViaVersion", "ViaBackwards", "ProtocolSupport", "MundoSK" ]
 api-version: 1.13
 commands:
   skin:
@@ -29,6 +29,9 @@ permissions:
     default: op
   skinsrestorer.command.update:
     description: Allows access to update your skin.
+    default: op
+  skinsrestorer.command.search:
+    description: Allows access to search your skin.
     default: op
 
   skinsrestorer.admincommand:

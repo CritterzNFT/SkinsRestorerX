@@ -24,7 +24,6 @@ import com.google.inject.Inject;
 import lombok.Getter;
 import net.skinsrestorer.api.PlayerWrapper;
 import net.skinsrestorer.api.SkinsRestorerAPI;
-import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.interfaces.IPropertyFactory;
 import net.skinsrestorer.api.interfaces.ISRPlayer;
 import net.skinsrestorer.api.property.GenericProperty;
@@ -32,6 +31,7 @@ import net.skinsrestorer.api.property.IProperty;
 import net.skinsrestorer.builddata.BuildData;
 import net.skinsrestorer.shared.interfaces.ISRPlugin;
 import net.skinsrestorer.shared.storage.Config;
+import net.skinsrestorer.shared.storage.CooldownStorage;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.storage.SkinStorage;
 import net.skinsrestorer.shared.update.UpdateChecker;
@@ -66,7 +66,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -76,6 +76,7 @@ public class SkinsRestorer implements ISRPlugin {
     private static final boolean BUNGEE_ENABLED = false;
     private final Metrics metrics;
     private final MetricsCounter metricsCounter = new MetricsCounter();
+    private final CooldownStorage cooldownStorage = new CooldownStorage();
     private final SkinApplierSponge skinApplierSponge = new SkinApplierSponge(this);
     private final Path dataFolderPath;
     private final SRLogger srLogger;
@@ -83,7 +84,7 @@ public class SkinsRestorer implements ISRPlugin {
     private final SkinStorage skinStorage;
     private final SkinsRestorerAPI skinsRestorerAPI;
     private final MineSkinAPI mineSkinAPI;
-    private final SkinCommand skinCommand = new SkinCommand(this);
+    private final SkinCommand skinCommand;
     @Inject
     protected Game game;
     private UpdateChecker updateChecker;
@@ -100,6 +101,7 @@ public class SkinsRestorer implements ISRPlugin {
         mineSkinAPI = new MineSkinAPI(srLogger, metricsCounter);
         skinStorage = new SkinStorage(srLogger, mojangAPI, mineSkinAPI);
         skinsRestorerAPI = new SkinsRestorerSpongeAPI();
+        skinCommand = new SkinCommand(this);
     }
 
     @Listener
@@ -110,12 +112,10 @@ public class SkinsRestorer implements ISRPlugin {
         // Check for updates
         if (!Files.exists(updaterDisabled)) {
             updateChecker = new UpdateCheckerGitHub(2124, getVersion(), srLogger, "SkinsRestorerUpdater/Sponge");
-            checkUpdate();
+            checkUpdate(true);
 
-            Random rn = new Random();
-            int delayInt = 60 + rn.nextInt(240 - 60 + 1);
-            Sponge.getScheduler().createTaskBuilder().execute(() ->
-                    checkUpdate(false)).interval(delayInt, TimeUnit.MINUTES).delay(delayInt, TimeUnit.MINUTES);
+            int delayInt = 60 + ThreadLocalRandom.current().nextInt(240 - 60 + 1);
+            runRepeat(this::checkUpdate, delayInt, delayInt, TimeUnit.MINUTES);
         } else {
             srLogger.info("Updater Disabled");
         }
@@ -132,7 +132,7 @@ public class SkinsRestorer implements ISRPlugin {
         initCommands();
 
         // Run connection check
-        Sponge.getScheduler().createAsyncExecutor(this).execute(() -> SharedMethods.runServiceCheck(mojangAPI, srLogger));
+        runAsync(() -> SharedMethods.runServiceCheck(mojangAPI, srLogger));
     }
 
     @Listener
@@ -146,31 +146,18 @@ public class SkinsRestorer implements ISRPlugin {
     }
 
     private void initCommands() {
-        Sponge.getPluginManager().getPlugin("skinsrestorer").ifPresent(pluginContainer -> {
-            manager = new SpongeCommandManager(pluginContainer);
+        manager = new SpongeCommandManager(container);
 
-            prepareACF(manager, srLogger);
+        prepareACF(manager, srLogger);
 
-            manager.registerCommand(skinCommand);
-            manager.registerCommand(new SrCommand(this));
-        });
+        runRepeat(cooldownStorage::cleanup, 60, 60, TimeUnit.SECONDS);
+
+        manager.registerCommand(skinCommand);
+        manager.registerCommand(new SrCommand(this));
     }
 
-    private boolean initStorage() {
-        // Initialise MySQL
-        if (!SharedMethods.initStorage(srLogger, skinStorage, dataFolderPath)) return false;
-
-        // Preload default skins
-        Sponge.getScheduler().createAsyncExecutor(this).execute(skinStorage::preloadDefaultSkins);
-        return true;
-    }
-
-    private void checkUpdate() {
-        checkUpdate(true);
-    }
-
-    private void checkUpdate(boolean showUpToDate) {
-        Sponge.getScheduler().createAsyncExecutor(this).execute(() -> updateChecker.checkForUpdate(new UpdateCallback() {
+    public void checkUpdate(boolean showUpToDate) {
+        runAsync(() -> updateChecker.checkForUpdate(new UpdateCallback() {
             @Override
             public void updateAvailable(String newVersion, String downloadUrl, boolean hasDirectDownload) {
                 updateChecker.getUpdateAvailableMessages(newVersion, downloadUrl, hasDirectDownload, getVersion(), SkinsRestorer.BUNGEE_ENABLED).forEach(srLogger::info);
@@ -202,6 +189,11 @@ public class SkinsRestorer implements ISRPlugin {
     }
 
     @Override
+    public void runRepeat(Runnable runnable, int delay, int interval, TimeUnit timeUnit) {
+        game.getScheduler().createTaskBuilder().execute(runnable).interval(interval, timeUnit).delay(delay, timeUnit).submit(this);
+    }
+
+    @Override
     public Collection<ISRPlayer> getOnlinePlayers() {
         return game.getServer().getOnlinePlayers().stream().map(WrapperSponge::wrapPlayer).collect(Collectors.toList());
     }
@@ -229,16 +221,6 @@ public class SkinsRestorer implements ISRPlugin {
     private class SkinsRestorerSpongeAPI extends SkinsRestorerAPI {
         public SkinsRestorerSpongeAPI() {
             super(mojangAPI, mineSkinAPI, skinStorage, new WrapperFactorySponge(), new PropertyFactorySponge());
-        }
-
-        @Override
-        public void applySkin(PlayerWrapper playerWrapper) throws SkinRequestException {
-            applySkin(playerWrapper, playerWrapper.get(Player.class).getName());
-        }
-
-        @Override
-        public void applySkin(PlayerWrapper playerWrapper, String playerName) throws SkinRequestException {
-            applySkin(playerWrapper, skinStorage.getSkinForPlayer(playerName));
         }
 
         @Override

@@ -51,13 +51,12 @@ DisablePrefix: false
 # ApplyForPremium: false will only put a skin on skinless/steve players.
 # If there is more than one, the plugin will choose a random one.
 # [?] Supports custom & url.png skins, read SkinFile Generator below. [?]
-# [!] url.png won't work on join for bungee, see https://github.com/SkinsRestorer/SkinsRestorerX/issues/315 [!]
 DefaultSkins:
   Enabled: false
   ApplyForPremium: false
   Names:
     - "xknat"
-    - "Pistonmaster"
+    - "pistonmaster"
 
 # Skins in this list will be disabled, so users can't set them.
 # Can be bypassed with 'skinsrestorer.bypassdisabled'.
@@ -85,7 +84,7 @@ CustomGUI:
   ShowOnlyCustomGUI: true
   Names:
     - "xknat"
-    - "Pistonmaster"
+    - "pistonmaster"
 
 ############
 # Advanced #

@@ -28,9 +28,16 @@ servers.
 
 ## :telescope: Compatibility
 
+**WE DO NOT SUPPORT FORGE / FABRIC**
+
 - Java 8 till 17 ([Adoptium](https://adoptium.net/)
   | [Oracle Java](https://www.oracle.com/de/java/technologies/javase-downloads.html))
-- Minecraft 1.8.0 - 1.19
+- Minecraft 1.8.0 - 1.19.2
+
+implementation:
+- proxy: Bungee (waterfall) & Velocity
+- Backend: Bukkit (spigot, paper purpur etc) & SpongeVanilla
+
 
 ## :link: Links
 
@@ -73,7 +80,7 @@ supported this project by contributing.
 <dependency>
     <groupId>net.skinsrestorer</groupId>
     <artifactId>skinsrestorer-api</artifactId>
-    <version>14.2.1</version>
+    <version>14.2.3</version>
     <scope>provided</scope>
 </dependency>
 ```

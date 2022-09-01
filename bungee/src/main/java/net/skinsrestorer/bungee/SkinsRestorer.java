@@ -22,12 +22,10 @@ package net.skinsrestorer.bungee;
 import co.aikar.commands.BungeeCommandManager;
 import lombok.Getter;
 import lombok.SneakyThrows;
-import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.skinsrestorer.api.PlayerWrapper;
 import net.skinsrestorer.api.SkinsRestorerAPI;
-import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.interfaces.IPropertyFactory;
 import net.skinsrestorer.api.interfaces.ISRPlayer;
 import net.skinsrestorer.api.interfaces.ISRProxyPlayer;
@@ -44,6 +42,7 @@ import net.skinsrestorer.bungee.utils.WrapperBungee;
 import net.skinsrestorer.shared.interfaces.ISRPlugin;
 import net.skinsrestorer.shared.interfaces.ISRProxyPlugin;
 import net.skinsrestorer.shared.storage.Config;
+import net.skinsrestorer.shared.storage.CooldownStorage;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.storage.SkinStorage;
 import net.skinsrestorer.shared.update.UpdateChecker;
@@ -64,7 +63,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Optional;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -73,6 +72,7 @@ import java.util.stream.Collectors;
 public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
     private static final String NEW_PROPERTY_CLASS = "net.md_5.bungee.protocol.Property";
     private final MetricsCounter metricsCounter = new MetricsCounter();
+    private final CooldownStorage cooldownStorage = new CooldownStorage();
     private final BungeeConsoleImpl bungeeConsole = new BungeeConsoleImpl(getProxy() == null ? null : getProxy().getConsole());
     private final JavaLoggerImpl javaLogger = new JavaLoggerImpl(bungeeConsole, getProxy() == null ? null : getProxy().getLogger());
     private final SRLogger srLogger = new SRLogger(javaLogger, true);
@@ -122,9 +122,8 @@ public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
             updateChecker = new UpdateCheckerGitHub(2124, getDescription().getVersion(), srLogger, "SkinsRestorerUpdater/BungeeCord");
             checkUpdate(true);
 
-            Random rn = new Random();
-            int delayInt = 60 + rn.nextInt(240 - 60 + 1);
-            getProxy().getScheduler().schedule(this, this::checkUpdate, delayInt, delayInt, TimeUnit.MINUTES);
+            int delayInt = 60 + ThreadLocalRandom.current().nextInt(240 - 60 + 1);
+            runRepeat(this::checkUpdate, delayInt, delayInt, TimeUnit.MINUTES);
         } else {
             srLogger.info("Updater Disabled");
         }
@@ -134,8 +133,11 @@ public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
         Locale.load(dataFolderPath, srLogger);
 
         // Init storage
-        if (!initStorage())
+        if (!initStorage()) {
+            getProxy().getPluginManager().unregisterListeners(this);
+            getProxy().getPluginManager().unregisterCommands(this);
             return;
+        }
 
         // Init listener
         getProxy().getPluginManager().registerListener(this, new LoginListener(this));
@@ -150,7 +152,7 @@ public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
         getProxy().getPluginManager().registerListener(this, new PluginMessageListener(this));
 
         // Run connection check
-        getProxy().getScheduler().runAsync(this, () -> SharedMethods.runServiceCheck(mojangAPI, srLogger));
+        runAsync(() -> SharedMethods.runServiceCheck(mojangAPI, srLogger));
     }
 
     private void initCommands() {
@@ -158,30 +160,15 @@ public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
 
         prepareACF(manager, srLogger);
 
+        runRepeat(cooldownStorage::cleanup, 60, 60, TimeUnit.SECONDS);
+
         manager.registerCommand(skinCommand);
         manager.registerCommand(new SrCommand(this));
         manager.registerCommand(new GUICommand(this));
     }
 
-    private boolean initStorage() {
-        // Initialise MySQL
-        if (!SharedMethods.initStorage(srLogger, skinStorage, dataFolderPath)) {
-            getProxy().getPluginManager().unregisterListeners(this);
-            getProxy().getPluginManager().unregisterCommands(this);
-            return false;
-        }
-
-        // Preload default skins
-        ProxyServer.getInstance().getScheduler().runAsync(this, skinStorage::preloadDefaultSkins);
-        return true;
-    }
-
-    private void checkUpdate() {
-        checkUpdate(false);
-    }
-
-    private void checkUpdate(boolean showUpToDate) {
-        ProxyServer.getInstance().getScheduler().runAsync(this, () -> updateChecker.checkForUpdate(new UpdateCallback() {
+    public void checkUpdate(boolean showUpToDate) {
+        runAsync(() -> updateChecker.checkForUpdate(new UpdateCallback() {
             @Override
             public void updateAvailable(String newVersion, String downloadUrl, boolean hasDirectDownload) {
                 outdated = true;
@@ -207,6 +194,11 @@ public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
     @Override
     public void runAsync(Runnable runnable) {
         getProxy().getScheduler().runAsync(this, runnable);
+    }
+
+    @Override
+    public void runRepeat(Runnable runnable, int delay, int interval, TimeUnit timeUnit) {
+        getProxy().getScheduler().schedule(this, runnable, delay, interval, timeUnit);
     }
 
     @Override
@@ -246,16 +238,6 @@ public class SkinsRestorer extends Plugin implements ISRProxyPlugin {
     private class SkinsRestorerBungeeAPI extends SkinsRestorerAPI {
         public SkinsRestorerBungeeAPI() {
             super(mojangAPI, mineSkinAPI, skinStorage, new WrapperFactoryBungee(), new PropertyFactoryBungee());
-        }
-
-        @Override
-        public void applySkin(PlayerWrapper playerWrapper) throws SkinRequestException {
-            applySkin(playerWrapper, playerWrapper.get(ProxiedPlayer.class).getName());
-        }
-
-        @Override
-        public void applySkin(PlayerWrapper playerWrapper, String playerName) throws SkinRequestException {
-            applySkin(playerWrapper, skinStorage.getSkinForPlayer(playerName));
         }
 
         @SneakyThrows

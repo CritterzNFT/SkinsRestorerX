@@ -55,8 +55,6 @@ public class UpdateDownloaderGithub extends UpdateDownloader {
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(releaseInfo.latestDownloadURL).openConnection();
             connection.setRequestProperty("User-Agent", userAgent);
-            connection.setConnectTimeout(20000);
-            connection.setReadTimeout(20000);
             if (connection.getResponseCode() != 200) {
                 throw new UpdateException("Download returned status #" + connection.getResponseCode());
             }
@@ -100,7 +98,7 @@ public class UpdateDownloaderGithub extends UpdateDownloader {
         final File updateFile = new File(updateFolder, pluginFile.getName());
 
         plugin.getSrLogger().info("[GitHubUpdate] Downloading update...");
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, downloadAsync(releaseInfo, updateFile, plugin.getUpdateChecker().getUserAgent(), new DownloadCallback() {
+        plugin.runAsync(downloadAsync(releaseInfo, updateFile, plugin.getUpdateChecker().getUserAgent(), new DownloadCallback() {
             @Override
             public void finished() {
                 plugin.getSrLogger().info("[GitHubUpdate] Update saved as " + updateFile.getPath());

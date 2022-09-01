@@ -32,6 +32,7 @@ import net.skinsrestorer.shared.storage.Config;
 import net.skinsrestorer.shared.storage.Locale;
 import net.skinsrestorer.shared.utils.C;
 import net.skinsrestorer.shared.utils.connections.ServiceChecker;
+import static net.skinsrestorer.shared.utils.SharedMethods.getRootCause;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -39,8 +40,9 @@ import java.util.LinkedList;
 import java.util.List;
 
 public interface ISRCommand {
-    @SuppressWarnings("unused")
     default void onHelp(ISRCommandSender sender, CommandHelp help) {
+        if (!CommandUtil.isAllowedToExecute(sender)) return;
+
         help.showHelp();
     }
 
@@ -170,7 +172,7 @@ public interface ISRCommand {
         ISRPlugin plugin = getPlugin();
         plugin.runAsync(() -> {
             try {
-                SkinsRestorerAPI.getApi().applySkin(target.getWrapper(), plugin.getSkinStorage().getDefaultSkinForPlayer(sender.getName()));
+                SkinsRestorerAPI.getApi().applySkin(target.getWrapper());
                 sender.sendMessage(Locale.ADMIN_APPLYSKIN_SUCCES);
             } catch (Exception ignored) {
                 sender.sendMessage(Locale.ADMIN_APPLYSKIN_ERROR);
@@ -192,7 +194,7 @@ public interface ISRCommand {
                     sender.sendMessage(Locale.ERROR_INVALID_URLSKIN);
                 }
             } catch (SkinRequestException e) {
-                sender.sendMessage(e.getMessage());
+                sender.sendMessage(getRootCause(e).getMessage());
             }
         });
     }
@@ -229,7 +231,7 @@ public interface ISRCommand {
                 }
                 sender.sendMessage("§aSuccessfully set skin of all online players to " + skin);
             } catch (SkinRequestException e) {
-                sender.sendMessage(e.getMessage());
+                sender.sendMessage(getRootCause(e).getMessage());
             }
         });
     }
@@ -258,15 +260,8 @@ public interface ISRCommand {
 
     List<IProperty> getPropertiesOfPlayer(ISRPlayer player);
 
-    @SuppressWarnings("unused")
     enum PlayerOrSkin {
         PLAYER,
         SKIN,
-    }
-
-    @SuppressWarnings("unused")
-    enum SkinType {
-        STEVE,
-        SLIM,
     }
 }

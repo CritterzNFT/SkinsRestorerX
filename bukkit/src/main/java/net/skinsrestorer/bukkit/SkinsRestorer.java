@@ -24,7 +24,6 @@ import io.papermc.lib.PaperLib;
 import lombok.Getter;
 import net.skinsrestorer.api.PlayerWrapper;
 import net.skinsrestorer.api.SkinsRestorerAPI;
-import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.interfaces.IPropertyFactory;
 import net.skinsrestorer.api.interfaces.ISRPlayer;
 import net.skinsrestorer.api.property.GenericProperty;
@@ -42,10 +41,7 @@ import net.skinsrestorer.bukkit.utils.*;
 import net.skinsrestorer.paper.PaperUtil;
 import net.skinsrestorer.shared.exception.InitializeException;
 import net.skinsrestorer.shared.interfaces.ISRPlugin;
-import net.skinsrestorer.shared.storage.Config;
-import net.skinsrestorer.shared.storage.Locale;
-import net.skinsrestorer.shared.storage.SkinStorage;
-import net.skinsrestorer.shared.storage.YamlConfig;
+import net.skinsrestorer.shared.storage.*;
 import net.skinsrestorer.shared.update.UpdateChecker;
 import net.skinsrestorer.shared.update.UpdateCheckerGitHub;
 import net.skinsrestorer.shared.utils.MetricsCounter;
@@ -71,15 +67,19 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
-import java.util.Random;
 import java.util.TreeMap;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 
 @Getter
 @SuppressWarnings("Duplicates")
 public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
     private final MetricsCounter metricsCounter = new MetricsCounter();
+    private final CooldownStorage cooldownStorage = new CooldownStorage();
     @SuppressWarnings("ConstantConditions")
     private final BukkitConsoleImpl bukkitConsole = new BukkitConsoleImpl(getServer() == null ? null : getServer().getConsoleSender());
     @SuppressWarnings("ConstantConditions")
@@ -101,18 +101,27 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
 
     @SuppressWarnings("unchecked")
     private static Map<String, GenericProperty> convertToObject(byte[] byteArr) {
-        Map<String, GenericProperty> map = new TreeMap<>();
         try {
             ByteArrayInputStream bis = new ByteArrayInputStream(byteArr);
             ObjectInputStream ois = new ObjectInputStream(bis);
 
-            while (bis.available() > 0) {
-                map = (Map<String, GenericProperty>) ois.readObject();
-            }
+            return (Map<String, GenericProperty>) ois.readObject();
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
+            return Collections.emptyMap();
         }
-        return map;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, String> convertToObjectV2(byte[] byteArr) {
+        try {
+            ObjectInputStream ois = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(byteArr)));
+
+            return (Map<String, String>) ois.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+            return Collections.emptyMap();
+        }
     }
 
     @Override
@@ -124,6 +133,11 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
     @Override
     public void runAsync(Runnable runnable) {
         getServer().getScheduler().runTaskAsynchronously(this, runnable);
+    }
+
+    @Override
+    public void runRepeat(Runnable runnable, int delay, int interval, TimeUnit timeUnit) {
+        getServer().getScheduler().runTaskTimerAsynchronously(this, runnable, timeUnit.toSeconds(delay) * 20L, timeUnit.toSeconds(interval) * 20L);
     }
 
     @Override
@@ -215,7 +229,7 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
                 if (!channel.equals("sr:skinchange"))
                     return;
 
-                Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                runAsync(() -> {
                     DataInputStream in = new DataInputStream(new ByteArrayInputStream(message));
 
                     try {
@@ -240,7 +254,7 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
                 if (!channel.equals("sr:messagechannel"))
                     return;
 
-                Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+                runAsync(() -> {
                     DataInputStream in = new DataInputStream(new ByteArrayInputStream(message));
 
                     try {
@@ -252,9 +266,7 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
                                 return;
 
                             requestSkinsFromBungeeCord(player, 0);
-                        }
-
-                        if (subChannel.equalsIgnoreCase("returnSkins")) {
+                        } else if (subChannel.equalsIgnoreCase("returnSkins") || subChannel.equalsIgnoreCase("returnSkinsV2")) {
                             Player player = Bukkit.getPlayer(in.readUTF());
                             if (player == null)
                                 return;
@@ -265,13 +277,18 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
                             byte[] msgBytes = new byte[len];
                             in.readFully(msgBytes);
 
-                            Map<String, GenericProperty> skinList = convertToObject(msgBytes);
+                            Map<String, String> skinList;
+                            if (subChannel.equalsIgnoreCase("returnSkinsV2")) {
+                                skinList = convertToObjectV2(msgBytes);
+                            } else { // LEGACY
+                                skinList = new TreeMap<>();
 
-                            //convert
-                            Map<String, IProperty> newSkinList = new TreeMap<>();
-                            skinList.forEach((name, property) -> newSkinList.put(name, SkinsRestorerAPI.getApi().createPlatformProperty(property.getName(), property.getValue(), property.getSignature())));
+                                convertToObject(msgBytes).forEach((key, value) -> {
+                                    skinList.put(key, value.getValue());
+                                });
+                            }
 
-                            Inventory inventory = SkinsGUI.createGUI(this, page, newSkinList);
+                            Inventory inventory = SkinsGUI.createGUI(this, page, skinList);
 
                             Bukkit.getScheduler().scheduleSyncDelayedTask(this, () -> player.openInventory(inventory));
                         }
@@ -286,8 +303,10 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
             Locale.load(dataFolderPath, srLogger);
 
             // Init storage
-            if (!initStorage())
+            if (!initStorage()) {
+                Bukkit.getPluginManager().disablePlugin(this);
                 return;
+            }
 
             // Init commands
             initCommands();
@@ -305,8 +324,7 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
             }
 
             // Run connection check
-            Bukkit.getScheduler().runTaskAsynchronously(this, () ->
-                    SharedMethods.runServiceCheck(mojangAPI, srLogger));
+            runAsync(() -> SharedMethods.runServiceCheck(mojangAPI, srLogger));
         }
     }
 
@@ -315,13 +333,13 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
         isUpdaterInitialized = true;
         Path updaterDisabled = dataFolderPath.resolve("noupdate.txt");
         if (!Files.exists(updaterDisabled)) {
-            checkUpdate(proxyMode, true);
+            checkUpdate(true);
 
             // Delay update between 5 & 30 minutes
-            int delayInt = 300 + new Random().nextInt(1800 + 1 - 300);
+            int delayInt = 300 + ThreadLocalRandom.current().nextInt(1800 + 1 - 300);
             // Repeat update between 1 & 4 hours
-            int periodInt = 60 + new Random().nextInt(240 + 1 - 60);
-            getServer().getScheduler().runTaskTimerAsynchronously(this, () -> checkUpdate(proxyMode, false), 20L * delayInt, 20L * 60 * periodInt);
+            int periodInt = 60 * (60 + ThreadLocalRandom.current().nextInt(240 + 1 - 60));
+            runRepeat(this::checkUpdate, delayInt, periodInt, TimeUnit.SECONDS);
         } else {
             srLogger.info("Updater Disabled");
         }
@@ -376,21 +394,11 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
 
         prepareACF(manager, srLogger);
 
+        runRepeat(cooldownStorage::cleanup, 60, 60, TimeUnit.SECONDS);
+
         manager.registerCommand(skinCommand);
         manager.registerCommand(new SrCommand(this));
         manager.registerCommand(new GUICommand(this));
-    }
-
-    private boolean initStorage() {
-        // Initialise SkinStorage
-        if (!SharedMethods.initStorage(srLogger, skinStorage, dataFolderPath)) {
-            Bukkit.getPluginManager().disablePlugin(this);
-            return false;
-        }
-
-        // Preload default skins
-        Bukkit.getScheduler().runTaskAsynchronously(this, skinStorage::preloadDefaultSkins);
-        return true;
     }
 
     private void checkProxyMode() {
@@ -459,6 +467,10 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
         sb1.append("\nRestart (/restart or /stop) all servers [Plugman or /reload are NOT supported, use /stop or /end]");
         sb1.append("\n\nBungeeCord now has SkinsRestorer installed with the Spigot integration!");
         sb1.append("\nYou may now configure SkinsRestorer on BungeeCord (BungeeCord plugins folder /plugins/SkinsRestorer)");
+        sb1.append("\n\n!== override files ==!");
+        sb1.append("\nWarning: only use override files if you wish to run commands / api on backend, you need to uninstall sr from proxy and connect all backend to same mysql");
+        sb1.append("\nHow to urn off proxy mode: create a file called disableProxyMode.txt in SkinsRestorer folder (backend server -> ./plugins/SkinsRestorer/disableProxyMode.txt)");
+        sb1.append("\nThis will force disable proxy mode on next restart");
 
         Path warning = dataFolderPath.resolve("(README) Use proxy config for settings! (README)");
         try {
@@ -486,7 +498,7 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
         }
     }
 
-    private void checkUpdate(boolean proxyMode, boolean showUpToDate) {
+    public void checkUpdate(boolean showUpToDate) {
         runAsync(() -> updateChecker.checkForUpdate(new UpdateCallback() {
             @Override
             public void updateAvailable(String newVersion, String downloadUrl, boolean hasDirectDownload) {
@@ -542,16 +554,6 @@ public class SkinsRestorer extends JavaPlugin implements ISRPlugin {
     private class SkinsRestorerBukkitAPI extends SkinsRestorerAPI {
         public SkinsRestorerBukkitAPI() {
             super(mojangAPI, mineSkinAPI, skinStorage, new WrapperFactoryBukkit(), new PropertyFactoryBukkit());
-        }
-
-        @Override
-        public void applySkin(PlayerWrapper playerWrapper) throws SkinRequestException {
-            applySkin(playerWrapper, playerWrapper.get(Player.class).getName());
-        }
-
-        @Override
-        public void applySkin(PlayerWrapper playerWrapper, String playerName) throws SkinRequestException {
-            applySkin(playerWrapper, skinStorage.getSkinForPlayer(playerName));
         }
 
         @Override

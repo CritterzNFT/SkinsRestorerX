@@ -21,7 +21,6 @@ package net.skinsrestorer.sponge;
 
 import com.flowpowered.math.vector.Vector3d;
 import lombok.RequiredArgsConstructor;
-import net.skinsrestorer.api.exception.SkinRequestException;
 import net.skinsrestorer.api.property.IProperty;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.data.key.Keys;
@@ -45,8 +44,8 @@ public class SkinApplierSponge {
         Sponge.getScheduler().createSyncExecutor(plugin).execute(() -> sendUpdate(player));
     }
 
-    public void updateProfileSkin(GameProfile profile, String skin) throws SkinRequestException {
-        setTexture(plugin.getSkinStorage().getSkinForPlayer(skin), profile.getPropertyMap().get(IProperty.TEXTURES_NAME));
+    public void updateProfileSkin(GameProfile profile, IProperty skin) {
+        setTexture(skin, profile.getPropertyMap().get(IProperty.TEXTURES_NAME));
     }
 
     private void setTexture(IProperty property, Collection<ProfileProperty> oldProperties) {

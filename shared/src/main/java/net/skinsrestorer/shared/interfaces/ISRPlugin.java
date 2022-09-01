@@ -22,10 +22,10 @@ package net.skinsrestorer.shared.interfaces;
 import co.aikar.commands.CommandManager;
 import net.skinsrestorer.api.interfaces.ISRPlayer;
 import net.skinsrestorer.shared.commands.ISkinCommand;
+import net.skinsrestorer.shared.storage.CooldownStorage;
 import net.skinsrestorer.shared.storage.SkinStorage;
 import net.skinsrestorer.shared.utils.CommandPropertiesManager;
 import net.skinsrestorer.shared.utils.CommandReplacements;
-import net.skinsrestorer.shared.utils.MetricsCounter;
 import net.skinsrestorer.shared.utils.SharedMethods;
 import net.skinsrestorer.shared.utils.connections.MojangAPI;
 import net.skinsrestorer.shared.utils.log.SRLogger;
@@ -34,6 +34,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.concurrent.TimeUnit;
 
 public interface ISRPlugin {
     Path getDataFolderPath();
@@ -42,13 +43,15 @@ public interface ISRPlugin {
 
     String getVersion();
 
-    MetricsCounter getMetricsCounter();
+    CooldownStorage getCooldownStorage();
 
     SRLogger getSrLogger();
 
     InputStream getResource(String resource);
 
     void runAsync(Runnable runnable);
+
+    void runRepeat(Runnable runnable, int delay, int interval, TimeUnit timeUnit);
 
     Collection<ISRPlayer> getOnlinePlayers();
 
@@ -70,7 +73,22 @@ public interface ISRPlugin {
         SharedMethods.allowIllegalACFNames();
     }
 
+    default boolean initStorage() {
+        // Initialise MySQL
+        if (!SharedMethods.initStorage(getSrLogger(), getSkinStorage(), getDataFolderPath())) return false;
+
+        // Preload default skins
+        runAsync(getSkinStorage()::preloadDefaultSkins);
+        return true;
+    }
+
     CommandManager<?, ?, ?, ?, ?, ?> getManager();
 
     MojangAPI getMojangAPI();
+
+    default void checkUpdate() {
+        checkUpdate(false);
+    }
+
+    void checkUpdate(boolean showUpToDate);
 }
